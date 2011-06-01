@@ -7,13 +7,13 @@ import org.openstreetmap.josm.plugins.Plugin;
 import org.openstreetmap.josm.plugins.PluginInformation;
 
 public class CurvesPlugin extends Plugin {
-    
+
     private CurveAction action;
-    
+
 	public CurvesPlugin(PluginInformation info) {
 		super(info);
 	}
-	
+
     @Override
     public void mapFrameInitialized(MapFrame oldFrame, MapFrame newFrame) {
         if (newFrame != null) {
@@ -21,10 +21,9 @@ public class CurvesPlugin extends Plugin {
             MainMenu.add(Main.main.menu.toolsMenu, action);
         }
     }
-	
-	@Override
+
     public void preReloadCleanup() {
-		
+
 	}
 
 }
