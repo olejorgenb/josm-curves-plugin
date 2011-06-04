@@ -7,9 +7,11 @@ import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 
 import org.openstreetmap.josm.Main;
 import org.openstreetmap.josm.actions.JosmAction;
@@ -177,26 +179,44 @@ public class CurveAction extends JosmAction {
         }
         }
 
-        List<Way> targetWays = new LinkedList<Way>();
+        Set<Way> targetWays = new HashSet<Way>();
+
+        boolean nodesHasBeenChoosen = false;
         if (selectedNodes.size() == 3) {
             Iterator<Node> nodeIter = selectedNodes.iterator();
             n1 = nodeIter.next();
             n2 = nodeIter.next();
             n3 = nodeIter.next();
-        } else if (selectedWays.size() == 1) {
+            nodesHasBeenChoosen = true;
+            if(selectedWays.isEmpty()) { // Create a brand new way
+                Way newWay = new Way();
+                targetWays.add(newWay);
+                cmds.add(new AddCommand(newWay));
+            }
+        }
+        if (selectedWays.isEmpty() == false) {
             // TODO: use only two nodes inferring the orientation from the parent way.
-            // Use the three last nodes in the way as anchors. This is intended to be used with the
-            // built in draw mode
-            Way w = selectedWays.iterator().next();
-            int nodeCount = w.getNodesCount();
-            if (nodeCount < 3)
-                return null;
-            n3 = w.getNode(nodeCount - 1);
-            n2 = w.getNode(nodeCount - 2);
-            n1 = w.getNode(nodeCount - 3);
+
+            if(nodesHasBeenChoosen == false) {
+                // Use the three last nodes in the way as anchors. This is intended to be used with the
+                // built in draw mode
+                Way w = selectedWays.iterator().next(); //TODO: select last selected way instead
+                int nodeCount = w.getNodesCount();
+                if (nodeCount < 3)
+                    return null;
+                n3 = w.getNode(nodeCount - 1);
+                n2 = w.getNode(nodeCount - 2);
+                n1 = w.getNode(nodeCount - 3);
+                nodesHasBeenChoosen = true;
+            }
+            targetWays.addAll(OsmPrimitive.getFilteredList(n1.getReferrers(), Way.class));
+            targetWays.addAll(OsmPrimitive.getFilteredList(n2.getReferrers(), Way.class));
+            targetWays.addAll(OsmPrimitive.getFilteredList(n3.getReferrers(), Way.class));
+
         } else {
             return null;
         }
+
         EastNorth p1 = n1.getEastNorth();
         EastNorth p2 = n2.getEastNorth();
         EastNorth p3 = n3.getEastNorth();
@@ -204,15 +224,6 @@ public class CurveAction extends JosmAction {
 
         // // Calculate the new points in the segment
         List<EastNorth> points = circleSeqmentPoints(p1, p2, p3, true, 15);
-
-        // // Add and/or change corresponding OSM primitives
-        Way way;
-        int nodeI = -1;
-        boolean makeNewWay = false;
-        Way originalWay = null;
-
-        targetWays.addAll(OsmPrimitive.getFilteredList(n2.getReferrers(), Way.class));
-
 
         //// Create the new arc nodes. Insert anchor nodes at correct positions.
         List<Node> arcNodes = new ArrayList<Node>(points.size());
@@ -227,25 +238,35 @@ public class CurveAction extends JosmAction {
             }
         }
         arcNodes.add(n3);
-        System.out.println("foo");
+
         //// "Fuse" the arc with all target ways
         // Do one segment at the time
         Node[] anchorNodes = {n1, n2, n3};
         for(Way originalTw : targetWays) {
             Way tw = new Way(originalTw);
             boolean didChangeTw = false;
+            boolean isClosed = tw.isClosed();
             for(int a = 0; a < 2; a++) {
                 //// Find the start and end index of the anchor nodes in current target way
                 int anchorBi = arcNodes.indexOf(anchorNodes[a]); // TODO: optimize away
                 int anchorEi = arcNodes.indexOf(anchorNodes[a+1]);
                 int bi = -1, ei = -1;
-                int i = 0;
+                int i = -1;
+                //// Caution: nodes might appear multiple times. For now only handle simple closed ways
                 for(Node n : tw.getNodes()) {
-                    if(n == anchorNodes[a])
-                        bi = i;
-                    else if (n == anchorNodes[a+1])
-                        ei = i;
                     i++;
+//                    if(i==0 && isClosed) //
+//                        continue;
+                    if(n == anchorNodes[a]) {
+                        bi = i;
+                        if(ei != -1)
+                            break;
+                    } else if (n == anchorNodes[a+1]) {
+                        ei = i;
+                        if (bi != -1)
+                            break;
+                    }
+
                 }
                 if(bi == -1 || ei == -1) {
                     assert(false);
@@ -254,10 +275,10 @@ public class CurveAction extends JosmAction {
                 didChangeTw = true;
 
                 //// Direction of target way relative to the arc node order
-                int twDirection = ei > bi ? 1 : -1;
-                int anchorI = anchorBi;
-                int twI = bi + twDirection;
-                while(anchorI <= anchorEi) {
+                int twDirection = ei > bi ? 1 : 0;
+                int anchorI = anchorBi+1; // don't insert the existing nodes
+                int twI = bi + (twDirection == 1 ? 1 : 0);
+                while(anchorI < anchorEi) {
                     tw.addNode(twI, arcNodes.get(anchorI));
                     anchorI++;
                     twI += twDirection;
@@ -372,8 +393,8 @@ public class CurveAction extends JosmAction {
         } else { // clockwise
             radialLength = Math.PI * 2 - a3;
             // make the angles consistent with the direction.
-            a2 = Math.PI * 2 - a2;
-            a3 = Math.PI * 2 - a3;
+            a2 = -(Math.PI * 2 - a2);
+            a3 = -(Math.PI * 2 - a3);
         }
         int numberOfNodesInCircle = (int) Math.ceil((radialLength / Math.PI) * 180 / resolution);
         List<EastNorth> points = new ArrayList<EastNorth>(numberOfNodesInCircle);
@@ -389,8 +410,9 @@ public class CurveAction extends JosmAction {
             double y = yc + r * Math.sin(realAngle);
 
             // Convoluted(?) way of ensuring that n2 is replacing the closest point
-            if (includeAnchors && a2 != 999 &&
-                    (fuzzyMatch(a2, a) || (a2 < direction * a && !fuzzyMatch(a2, nextA)))) {
+//            if (includeAnchors && a2 != 999 &&
+//                    (fuzzyMatch(a2, a) || (a2 < direction * a && !fuzzyMatch(a2, nextA)))) {
+            if(a2 != 999 && (direction == 1 ? (a > a2) : (a < a2))) {
                 points.add(p2);
                 a2 = 999;
             }
