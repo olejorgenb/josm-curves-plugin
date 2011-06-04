@@ -21,6 +21,7 @@ import org.openstreetmap.josm.data.coor.EastNorth;
 import org.openstreetmap.josm.data.osm.Node;
 import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.Way;
+import org.openstreetmap.josm.plugins.curves.spline.CatmullRom;
 import org.openstreetmap.josm.tools.Shortcut;
 
 // TODO: investigate splines
@@ -41,71 +42,261 @@ public class CurveAction extends JosmAction {
         if (!isEnabled())
             return;
 
-        Collection<Node> nodes = getCurrentDataSet().getSelectedNodes();
-        Collection<Way> ways = getCurrentDataSet().getSelectedWays();
-        Collection<Command> cmds = new LinkedList<Command>();
+        List<Node> selectedNodes = new ArrayList<Node>(getCurrentDataSet().getSelectedNodes());
+        List<Way> selectedWays = new ArrayList<Way>(getCurrentDataSet().getSelectedWays());
 
-        Node n1, n2, n3;
+        // Collection<Command> cmds = doSpline(selectedNodes, selectedWays);
+        Collection<Command> cmds = doCircleArc(selectedNodes, selectedWays);
+        if (cmds != null)
+            Main.main.undoRedo.add(new SequenceCommand("Create a curve", cmds));
+    }
 
-        if (nodes.size() == 3) {
-            Iterator<Node> nodeIter = nodes.iterator();
+    private Collection<Command> doSpline(Collection<Node> selectedNodes, Collection<Way> selectedWays) {
+        // // Decides which nodes to use as anchors based on selection
+        Node n1, n2, n3, n4, n5;
+
+        if (selectedNodes.size() == 4) {
+            Iterator<Node> nodeIter = selectedNodes.iterator();
             n1 = nodeIter.next();
             n2 = nodeIter.next();
             n3 = nodeIter.next();
-        } else if (ways.size() == 1) {
+            n4 = nodeIter.next();
+            n5 = nodeIter.next();
+        } else if (selectedWays.size() == 1) {
             // TODO: use only two nodes inferring the orientation from the parent way.
             // Use the three last nodes in the way as anchors. This is intended to be used with the
             // built in draw mode
-            Way w = ways.iterator().next();
+            Way w = selectedWays.iterator().next();
             int nodeCount = w.getNodesCount();
             if (nodeCount < 3)
-                return;
+                return null;
+            nodeCount--;
+            n5 = w.getNode(nodeCount--);
+            n4 = w.getNode(nodeCount--);
+            n3 = w.getNode(nodeCount--);
+            n2 = w.getNode(nodeCount--);
+            n1 = w.getNode(nodeCount--);
+        } else {
+            return null;
+        }
+        EastNorth p1 = n1.getEastNorth();
+        EastNorth p2 = n2.getEastNorth();
+        EastNorth p3 = n3.getEastNorth();
+        EastNorth p4 = n4.getEastNorth();
+        EastNorth p5 = n5.getEastNorth();
+
+        Collection<Command> cmds = new LinkedList<Command>();
+
+        // int pts = 5;
+        // double[] spline = SplineFactory.createCatmullRom(new double[] {
+        // p1.getX(), p1.getY(), 0,
+        // p2.getX(), p2.getY(), 0,
+        // p3.getX(), p3.getY(), 0,
+        // p4.getX(), p4.getY(), 0,
+        // p5.getX(), p5.getY(), 0},
+        // pts);
+        // Way w = new Way();
+        // for(int i = pts*3; i < spline.length-pts*3; i+=3) {
+        // double x = spline[i];
+        // double y = spline[i+1];
+        // Node n = new Node(new EastNorth(x, y));
+        // cmds.add(new AddCommand(n));
+        // w.addNode(n);
+        // }
+        // cmds.add(new AddCommand(w));
+
+        // Cardinal spline = new Cardinal(
+        // new double[] { p3.getX(), p4.getX(), p5.getX() },
+        // new double[] { p3.getY(), p4.getY(), p5.getY() },
+        // 4);
+        // double points[] = spline.interpolate(26);
+        // Way w = new Way();
+        // for (int i = 0; i < points.length; i += 2) {
+        // double x = points[i];
+        // double y = points[i + 1];
+        // Node n = new Node(new EastNorth(x, y));
+        // cmds.add(new AddCommand(n));
+        // w.addNode(n);
+        // }
+        // cmds.add(new AddCommand(w));
+
+        CatmullRom spline = new CatmullRom();
+        spline.addPoints(
+                new double[] { p1.getX(), p2.getX(), p3.getX(), p4.getX(), p5.getX() },
+                new double[] { p1.getY(), p2.getY(), p3.getY(), p4.getY(), p5.getY() });
+        double points[] = spline.interpolate(7);
+        Way w = new Way();
+        for (int i = 0; i < points.length; i += 2) {
+            double x = points[i];
+            double y = points[i + 1];
+            Node n = new Node(new EastNorth(x, y));
+            cmds.add(new AddCommand(n));
+            w.addNode(n);
+        }
+        cmds.add(new AddCommand(w));
+
+        return cmds;
+    }
+
+    private Collection<Command> doCircleArc(List<Node> selectedNodes, List<Way> selectedWays) {
+        Collection<Command> cmds = new LinkedList<Command>();
+
+        //// Decides which nodes to use as anchors based on selection
+        /*
+         * Rules goes like this:
+         * If there are selected ways, at least one of these are used as target ways for the arc.
+         * Selected ways override selected nodes. If nodes not part of the ways are selected they're ignored.
+         *
+         * When existing ways are reused for the arc, all ways overlapping these are transformed too.
+         *
+         * 1. Exactly 3 nodes selected:
+         *      Use these nodes.
+         *      - No way selected: create a new way.
+         * 2. Exactly 1 node selected, node part of exactly 1 way with 3 or more nodes:
+         *      Node selected used as first node, consequent nodes in the way's direction used as the rest.
+         *      - Reversed if not enough nodes in forward direction
+         *      - Selected node used as middle node its the middle node in a 3 node way
+         *      - Parent way used
+         */
+
+        //// Anchor nodes
+        Node n1 = null, n2 = null, n3 = null;
+
+        {
+        int nodeCount = selectedNodes.size();
+        int wayCount = selectedWays.size();
+
+        // TODO: filter garbage nodes based on selected ways
+
+        // Never interested in more than 3 nodes. Nodes prioritized by reverse selection order, but keep their order.
+        // TODO: replace by helper function (eg. getPostFixList(int count))
+        Node[] nodesOfInterest = new Node[3];
+        int nodesOfInterestCount = Math.min(nodeCount, 3);
+        for(int i = nodesOfInterestCount-1; i >= 0; i--) {
+            nodesOfInterest[i] = selectedNodes.get(nodeCount-1-i);
+        }
+        }
+
+        List<Way> targetWays = new LinkedList<Way>();
+        if (selectedNodes.size() == 3) {
+            Iterator<Node> nodeIter = selectedNodes.iterator();
+            n1 = nodeIter.next();
+            n2 = nodeIter.next();
+            n3 = nodeIter.next();
+        } else if (selectedWays.size() == 1) {
+            // TODO: use only two nodes inferring the orientation from the parent way.
+            // Use the three last nodes in the way as anchors. This is intended to be used with the
+            // built in draw mode
+            Way w = selectedWays.iterator().next();
+            int nodeCount = w.getNodesCount();
+            if (nodeCount < 3)
+                return null;
             n3 = w.getNode(nodeCount - 1);
             n2 = w.getNode(nodeCount - 2);
             n1 = w.getNode(nodeCount - 3);
         } else {
-            return;
+            return null;
         }
         EastNorth p1 = n1.getEastNorth();
         EastNorth p2 = n2.getEastNorth();
         EastNorth p3 = n3.getEastNorth();
         // TODO: Check that the points are distinct
-        List<EastNorth> points = circleSeqmentPoints(p1, p2, p3, true, 10);
 
+        // // Calculate the new points in the segment
+        List<EastNorth> points = circleSeqmentPoints(p1, p2, p3, true, 15);
+
+        // // Add and/or change corresponding OSM primitives
         Way way;
         int nodeI = -1;
         boolean makeNewWay = false;
         Way originalWay = null;
-        List<Way> refs = OsmPrimitive.getFilteredList(n2.getReferrers(), Way.class);
-        if (refs.size() == 1) { // TODO: handle multiple ways like in draw mode
-            originalWay = refs.get(0);
-            way = new Way(originalWay);
-            nodeI = way.getNodes().indexOf(n1) + 1;
-        } else {
-            way = new Way();
-            way.addNode(n1);
-            nodeI = 1;
-            makeNewWay = true;
-        }
+
+        targetWays.addAll(OsmPrimitive.getFilteredList(n2.getReferrers(), Way.class));
+
+
+        //// Create the new arc nodes. Insert anchor nodes at correct positions.
+        List<Node> arcNodes = new ArrayList<Node>(points.size());
+        arcNodes.add(n1);
         for (EastNorth p : slice(points, 1, -2)) {
             if (p == p2) {
-                if (makeNewWay) {
-                    way.addNode(nodeI, n2);
-                }
+                arcNodes.add(n2);
             } else {
                 Node n = new Node(p);
-                way.addNode(nodeI, n);
+                arcNodes.add(n);
                 cmds.add(new AddCommand(n));
             }
-            nodeI++;
         }
-        if (makeNewWay) {
-            way.addNode(n3);
-            cmds.add(new AddCommand(way));
-        } else {
-            cmds.add(new ChangeCommand(originalWay, way));
+        arcNodes.add(n3);
+        System.out.println("foo");
+        //// "Fuse" the arc with all target ways
+        // Do one segment at the time
+        Node[] anchorNodes = {n1, n2, n3};
+        for(Way originalTw : targetWays) {
+            Way tw = new Way(originalTw);
+            boolean didChangeTw = false;
+            for(int a = 0; a < 2; a++) {
+                //// Find the start and end index of the anchor nodes in current target way
+                int anchorBi = arcNodes.indexOf(anchorNodes[a]); // TODO: optimize away
+                int anchorEi = arcNodes.indexOf(anchorNodes[a+1]);
+                int bi = -1, ei = -1;
+                int i = 0;
+                for(Node n : tw.getNodes()) {
+                    if(n == anchorNodes[a])
+                        bi = i;
+                    else if (n == anchorNodes[a+1])
+                        ei = i;
+                    i++;
+                }
+                if(bi == -1 || ei == -1) {
+                    assert(false);
+                    continue;
+                }
+                didChangeTw = true;
+
+                //// Direction of target way relative to the arc node order
+                int twDirection = ei > bi ? 1 : -1;
+                int anchorI = anchorBi;
+                int twI = bi + twDirection;
+                while(anchorI <= anchorEi) {
+                    tw.addNode(twI, arcNodes.get(anchorI));
+                    anchorI++;
+                    twI += twDirection;
+                }
+            }
+            if(didChangeTw)
+                cmds.add(new ChangeCommand(originalTw, tw));
         }
-        Main.main.undoRedo.add(new SequenceCommand("Create a curve", cmds));
+
+
+//        if (targetWays.size() == 1) { // TODO: handle multiple ways like in draw mode
+//            originalWay = targetWays.get(0);
+//            way = new Way(originalWay);
+//            nodeI = way.getNodes().indexOf(n1) + 1;
+//        } else {
+//            way = new Way();
+//            way.addNode(n1);
+//            nodeI = 1;
+//            makeNewWay = true;
+//        }
+//        for (EastNorth p : slice(points, 1, -2)) {
+//            if (p == p2) {
+//                if (makeNewWay) {
+//                    way.addNode(nodeI, n2);
+//                }
+//            } else {
+//                Node n = new Node(p);
+//                way.addNode(nodeI, n);
+//                cmds.add(new AddCommand(n));
+//            }
+//            nodeI++;
+//        }
+//        if (makeNewWay) {
+//            way.addNode(n3);
+//            cmds.add(new AddCommand(way));
+//        } else {
+//            cmds.add(new ChangeCommand(originalWay, way));
+//        }
+        return cmds;
     }
 
     // gah... why can't java support "reverse indexes"?
