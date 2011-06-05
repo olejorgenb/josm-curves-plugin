@@ -192,6 +192,9 @@ public class CurveAction extends JosmAction {
                 Way newWay = new Way();
                 targetWays.add(newWay);
                 cmds.add(new AddCommand(newWay));
+                newWay.addNode(n1);
+                newWay.addNode(n2);
+                newWay.addNode(n3);
             }
         }
         if (selectedWays.isEmpty() == false) {
@@ -212,8 +215,12 @@ public class CurveAction extends JosmAction {
             targetWays.addAll(OsmPrimitive.getFilteredList(n1.getReferrers(), Way.class));
             targetWays.addAll(OsmPrimitive.getFilteredList(n2.getReferrers(), Way.class));
             targetWays.addAll(OsmPrimitive.getFilteredList(n3.getReferrers(), Way.class));
+//            for(Way w : selectedWays) {
+//                targetWays.add(w);
+//            }
 
-        } else {
+        }
+        if (nodesHasBeenChoosen == false) {
             return null;
         }
 
@@ -223,7 +230,7 @@ public class CurveAction extends JosmAction {
         // TODO: Check that the points are distinct
 
         // // Calculate the new points in the segment
-        List<EastNorth> points = circleSeqmentPoints(p1, p2, p3, true, 15);
+        List<EastNorth> points = circleSeqmentPoints(p1, p2, p3, 15, true, null);
 
         //// Create the new arc nodes. Insert anchor nodes at correct positions.
         List<Node> arcNodes = new ArrayList<Node>(points.size());
@@ -245,7 +252,6 @@ public class CurveAction extends JosmAction {
         for(Way originalTw : targetWays) {
             Way tw = new Way(originalTw);
             boolean didChangeTw = false;
-            boolean isClosed = tw.isClosed();
             for(int a = 0; a < 2; a++) {
                 //// Find the start and end index of the anchor nodes in current target way
                 int anchorBi = arcNodes.indexOf(anchorNodes[a]); // TODO: optimize away
@@ -266,7 +272,6 @@ public class CurveAction extends JosmAction {
                         if (bi != -1)
                             break;
                     }
-
                 }
                 if(bi == -1 || ei == -1) {
                     assert(false);
@@ -288,39 +293,10 @@ public class CurveAction extends JosmAction {
                 cmds.add(new ChangeCommand(originalTw, tw));
         }
 
-
-//        if (targetWays.size() == 1) { // TODO: handle multiple ways like in draw mode
-//            originalWay = targetWays.get(0);
-//            way = new Way(originalWay);
-//            nodeI = way.getNodes().indexOf(n1) + 1;
-//        } else {
-//            way = new Way();
-//            way.addNode(n1);
-//            nodeI = 1;
-//            makeNewWay = true;
-//        }
-//        for (EastNorth p : slice(points, 1, -2)) {
-//            if (p == p2) {
-//                if (makeNewWay) {
-//                    way.addNode(nodeI, n2);
-//                }
-//            } else {
-//                Node n = new Node(p);
-//                way.addNode(nodeI, n);
-//                cmds.add(new AddCommand(n));
-//            }
-//            nodeI++;
-//        }
-//        if (makeNewWay) {
-//            way.addNode(n3);
-//            cmds.add(new AddCommand(way));
-//        } else {
-//            cmds.add(new ChangeCommand(originalWay, way));
-//        }
         return cmds;
     }
 
-    // gah... why can't java support "reverse indexes"?
+    // gah... why can't java support "reverse indies"?
     protected static <T> List<T> slice(List<T> list, int from, int to) {
         if (to < 0)
             to += list.size() + 1;
@@ -349,7 +325,7 @@ public class CurveAction extends JosmAction {
      * @param includeAnchors include the anchorpoints in the list. The original objects will be used, not copies
      */
     private static List<EastNorth> circleSeqmentPoints(EastNorth p1, EastNorth p2, EastNorth p3,
-            boolean includeAnchors, int resolution) {
+            int resolution, boolean includeAnchors, int[] anchor2Index) {
 
         // triangle: three single nodes needed or a way with three nodes
 
@@ -385,7 +361,7 @@ public class CurveAction extends JosmAction {
         double a1 = 0;
         double a2 = normalizeAngle(realA2 - startAngle);
         double a3 = normalizeAngle(realA3 - startAngle);
-        double direction = a3 > a2 ? 1 : -1;
+        int direction = a3 > a2 ? 1 : -1;
 
         double radialLength = 0;
         if (direction == 1) { // counter clockwise
@@ -393,18 +369,37 @@ public class CurveAction extends JosmAction {
         } else { // clockwise
             radialLength = Math.PI * 2 - a3;
             // make the angles consistent with the direction.
-            a2 = -(Math.PI * 2 - a2);
-            a3 = -(Math.PI * 2 - a3);
+            a2 = (Math.PI * 2 - a2);
+            a3 = (Math.PI * 2 - a3);
         }
-        int numberOfNodesInCircle = (int) Math.ceil((radialLength / Math.PI) * 180 / resolution);
-        List<EastNorth> points = new ArrayList<EastNorth>(numberOfNodesInCircle);
+        int numberOfNodesInArc = (int) Math.ceil((radialLength / Math.PI) * 180 / resolution);
+        List<EastNorth> points = new ArrayList<EastNorth>(numberOfNodesInArc);
 
         // Calculate the circle points in order
-        double a = direction * (radialLength * 1 / numberOfNodesInCircle);
+        double stepLength = radialLength / numberOfNodesInArc;
+        // Determine closest index to p2
+
+        int indexJustBeforeP2 = (int)Math.floor(a2/stepLength);
+        int closestIndexToP2 = indexJustBeforeP2;
+        if ((a2 - indexJustBeforeP2*stepLength) > ((indexJustBeforeP2+1)*stepLength - a2)) {
+            closestIndexToP2 = indexJustBeforeP2+1;
+        }
+        // can't merge with end node
+        if(closestIndexToP2 == numberOfNodesInArc-1) {
+            closestIndexToP2--;
+        } else if(closestIndexToP2 == 0) {
+            closestIndexToP2++;
+        }
+        assert(closestIndexToP2 != 0);
+
+        double a = direction * (stepLength);
         points.add(p1);
+        if (indexJustBeforeP2 == 0 && includeAnchors) {
+            points.add(p2);
+        }
         // i is ahead of the real index by one, since we need to be ahead in the angle calculation
-        for (int i = 2; i < numberOfNodesInCircle + 1; i++) {
-            double nextA = direction * (radialLength * i / numberOfNodesInCircle);
+        for (int i = 2; i < numberOfNodesInArc + 1; i++) {
+            double nextA = direction * (i * stepLength);
             double realAngle = a + startAngle;
             double x = xc + r * Math.cos(realAngle);
             double y = yc + r * Math.sin(realAngle);
@@ -412,14 +407,21 @@ public class CurveAction extends JosmAction {
             // Convoluted(?) way of ensuring that n2 is replacing the closest point
 //            if (includeAnchors && a2 != 999 &&
 //                    (fuzzyMatch(a2, a) || (a2 < direction * a && !fuzzyMatch(a2, nextA)))) {
-            if(a2 != 999 && (direction == 1 ? (a > a2) : (a < a2))) {
-                points.add(p2);
-                a2 = 999;
-            }
+//            if(a2 != 999 && (direction == 1 ? (a > a2) : (a < a2))) {
+//                points.add(p2);
+//                a2 = 999;
+//            }
+
             points.add(new EastNorth(x, y));
+            if (i-1 == indexJustBeforeP2  && includeAnchors) {
+                points.add(p2);
+            }
             a = nextA;
         }
         points.add(p3);
+        if(anchor2Index != null) {
+            anchor2Index[0] = closestIndexToP2;
+        }
         return points;
     }
 
