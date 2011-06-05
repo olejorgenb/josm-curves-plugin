@@ -77,9 +77,9 @@
 				<attribute name="Author" value="Ole Jørgen Brønner" />
                 <attribute name="Plugin-Class" value="org.openstreetmap.josm.plugins.curves.CurvesPlugin" />
                 <attribute name="Plugin-Date" value="${version.entry.commit.date}" />
-                <attribute name="Plugin-Description" value="Create differnt kinds of curves" />
-				<attribute name="Plugin-Icon" value="..." />
-				<attribute name="Plugin-Link" value="http://wiki.openstreetmap.org/wiki/JOSM/Plugin/Curves" />
+				<attribute name="Plugin-Description" value="[Alpha] Create differnt kinds of curves. Only circle arcs supported currently" />
+				<attribute name="Plugin-Icon" value="" />
+				<attribute name="Plugin-Link" value="http://wiki.openstreetmap.org/wiki/JOSM/Plugins/Curves" />
                 <attribute name="Plugin-Mainversion" value="${plugin.main.version}" />
 				<attribute name="Plugin-Version" value="${version.entry.commit.revision}" />
             </manifest>
