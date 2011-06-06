@@ -24,6 +24,8 @@ public class CurveAction extends JosmAction {
 
     private static final long serialVersionUID = 1L;
 
+    private int angleSeparation = -1;
+
     public CurveAction() {
         super(tr("Circle arc"), "circlearc", tr("Create a circle arc"),
                 Shortcut.registerShortcut("tools:createcurve", tr("Tool: {0}", tr("Create a circle arc")), KeyEvent.VK_C,
@@ -31,16 +33,28 @@ public class CurveAction extends JosmAction {
         putValue("help", ht("/Action/CreateCircleArc"));
     }
 
+    private void updatePreferences() {
+        // @formatter:off
+        angleSeparation = Main.pref.getInteger(prefKey("circlearc.angle-separation"), 20);
+        // @formatter:on
+    }
+
+    private String prefKey(String subKey) {
+        return "curves." + subKey;
+    }
+
     @Override
     public void actionPerformed(ActionEvent e) {
         if (!isEnabled())
             return;
 
+        updatePreferences();
+
         List<Node> selectedNodes = new ArrayList<Node>(getCurrentDataSet().getSelectedNodes());
         List<Way> selectedWays = new ArrayList<Way>(getCurrentDataSet().getSelectedWays());
 
         // Collection<Command> cmds = doSpline(selectedNodes, selectedWays);
-        Collection<Command> cmds = CircleArcMaker.doCircleArc(selectedNodes, selectedWays);
+        Collection<Command> cmds = CircleArcMaker.doCircleArc(selectedNodes, selectedWays, angleSeparation);
         if (cmds != null)
             Main.main.undoRedo.add(new SequenceCommand("Create a curve", cmds));
     }

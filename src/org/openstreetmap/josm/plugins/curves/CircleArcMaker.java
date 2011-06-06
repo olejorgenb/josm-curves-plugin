@@ -17,7 +17,7 @@ import org.openstreetmap.josm.data.osm.OsmPrimitive;
 import org.openstreetmap.josm.data.osm.Way;
 
 public class CircleArcMaker {
-    public static Collection<Command> doCircleArc(List<Node> selectedNodes, List<Way> selectedWays) {
+    public static Collection<Command> doCircleArc(List<Node> selectedNodes, List<Way> selectedWays, int angleSeparation) {
         Collection<Command> cmds = new LinkedList<Command>();
 
         //// Decides which nodes to use as anchors based on selection
@@ -109,7 +109,7 @@ public class CircleArcMaker {
 
         // // Calculate the new points in the segment
         ReturnValue<Integer> p2Index = new ReturnValue<Integer>();
-        List<EastNorth> points = circleSeqmentPoints(p1, p2, p3, 15, false, p2Index);
+        List<EastNorth> points = circleSeqmentPoints(p1, p2, p3, angleSeparation, false, p2Index);
 
         //// Create the new arc nodes. Insert anchor nodes at correct positions.
         List<Node> arcNodes = new ArrayList<Node>(points.size());
@@ -200,7 +200,7 @@ public class CircleArcMaker {
      * @param anchor2Index if non-null, it's value will be set to p2's index in the returned list.
      */
     private static List<EastNorth> circleSeqmentPoints(EastNorth p1, EastNorth p2, EastNorth p3,
-            int resolution, boolean includeAnchors, ReturnValue<Integer> anchor2Index) {
+            int angleSeparation, boolean includeAnchors, ReturnValue<Integer> anchor2Index) {
 
         // triangle: three single nodes needed or a way with three nodes
 
@@ -247,7 +247,7 @@ public class CircleArcMaker {
             a2 = (Math.PI * 2 - a2);
             a3 = (Math.PI * 2 - a3);
         }
-        int numberOfNodesInArc = (int) Math.ceil((radialLength / Math.PI) * 180 / resolution);
+        int numberOfNodesInArc = (int) Math.ceil((radialLength / Math.PI) * 180 / angleSeparation);
         List<EastNorth> points = new ArrayList<EastNorth>(numberOfNodesInArc);
 
         // Calculate the circle points in order
