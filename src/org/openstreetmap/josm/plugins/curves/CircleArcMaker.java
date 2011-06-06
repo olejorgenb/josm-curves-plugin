@@ -107,18 +107,27 @@ public class CircleArcMaker {
         // TODO: Check that the points are distinct
 
         // // Calculate the new points in the segment
-        List<EastNorth> points = circleSeqmentPoints(p1, p2, p3, 15, true, null);
+        ReturnValue<Integer> p2Index = new ReturnValue<Integer>();
+        List<EastNorth> points = circleSeqmentPoints(p1, p2, p3, 15, false, p2Index);
 
         //// Create the new arc nodes. Insert anchor nodes at correct positions.
         List<Node> arcNodes = new ArrayList<Node>(points.size());
         arcNodes.add(n1);
-        for (EastNorth p : slice(points, 1, -2)) {
-            if (p == p2) {
-                arcNodes.add(n2);
-            } else {
-                Node n = new Node(p);
-                arcNodes.add(n);
-                cmds.add(new AddCommand(n));
+        {
+            int i = 1;
+            for (EastNorth p : slice(points, 1, -2)) {
+                //            if (p == p2) {
+                if (i == p2Index.value) {
+                    Node n2new = new Node(n2);
+                    n2new.setEastNorth(p);
+                    arcNodes.add(n2); // add the original n2, or else we can't find it in the target ways
+                    cmds.add(new ChangeCommand(n2, n2new));
+                } else {
+                    Node n = new Node(p);
+                    arcNodes.add(n);
+                    cmds.add(new AddCommand(n));
+                }
+                i++;
             }
         }
         arcNodes.add(n3);
@@ -182,10 +191,12 @@ public class CircleArcMaker {
      * Return a list of coordinates lying an the circle segment determined by n1, n2 and n3.
      * The order of the list and which of the 3 possible segments are given by the order of n1, n2, n3
      *
-     * @param includeAnchors include the anchorpoints in the list. The original objects will be used, not copies
+     * @param includeAnchors include the anchorpoints in the list. The original objects will be used, not copies.
+     *                       If {@code false}, p2 will be replaced by the closest arcpoint.
+     * @param anchor2Index if non-null, it's value will be set to p2's index in the returned list.
      */
     private static List<EastNorth> circleSeqmentPoints(EastNorth p1, EastNorth p2, EastNorth p3,
-            int resolution, boolean includeAnchors, int[] anchor2Index) {
+            int resolution, boolean includeAnchors, ReturnValue<Integer> anchor2Index) {
 
         // triangle: three single nodes needed or a way with three nodes
 
@@ -272,7 +283,7 @@ public class CircleArcMaker {
         }
         points.add(p3);
         if (anchor2Index != null) {
-            anchor2Index[0] = closestIndexToP2;
+            anchor2Index.value = closestIndexToP2;
         }
         return points;
     }
@@ -322,5 +333,8 @@ public class CircleArcMaker {
             a -= 2 * Math.PI;
         }
         return a;
+    }
+    public static class ReturnValue<T> {
+        public T value;
     }
 }
