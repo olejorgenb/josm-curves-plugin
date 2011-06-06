@@ -198,6 +198,7 @@ public class CircleArcMaker {
      * @param includeAnchors include the anchorpoints in the list. The original objects will be used, not copies.
      *                       If {@code false}, p2 will be replaced by the closest arcpoint.
      * @param anchor2Index if non-null, it's value will be set to p2's index in the returned list.
+     * @param angleSparation maximum angle separation between the arc points
      */
     private static List<EastNorth> circleArcPoints(EastNorth p1, EastNorth p2, EastNorth p3,
             int angleSeparation, boolean includeAnchors, ReturnValue<Integer> anchor2Index) {
@@ -247,11 +248,12 @@ public class CircleArcMaker {
             a2 = (Math.PI * 2 - a2);
             a3 = (Math.PI * 2 - a3);
         }
-        int numberOfNodesInArc = (int) Math.ceil((radialLength / Math.PI) * 180 / angleSeparation);
+        int numberOfNodesInArc = Math.max((int) Math.ceil((radialLength / Math.PI) * 180 / angleSeparation)+1,
+                3);
         List<EastNorth> points = new ArrayList<EastNorth>(numberOfNodesInArc);
 
         // Calculate the circle points in order
-        double stepLength = radialLength / numberOfNodesInArc;
+        double stepLength = radialLength / (numberOfNodesInArc-1);
         // Determine closest index to p2
 
         int indexJustBeforeP2 = (int) Math.floor(a2 / stepLength);
@@ -273,7 +275,7 @@ public class CircleArcMaker {
             points.add(p2);
         }
         // i is ahead of the real index by one, since we need to be ahead in the angle calculation
-        for (int i = 2; i < numberOfNodesInArc + 1; i++) {
+        for (int i = 2; i < numberOfNodesInArc; i++) {
             double nextA = direction * (i * stepLength);
             double realAngle = a + startAngle;
             double x = xc + r * Math.cos(realAngle);
