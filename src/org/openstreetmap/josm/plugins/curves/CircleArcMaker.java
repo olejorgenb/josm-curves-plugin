@@ -107,9 +107,9 @@ public class CircleArcMaker {
         EastNorth p3 = n3.getEastNorth();
         // TODO: Check that the points are distinct
 
-        // // Calculate the new points in the segment
+        // // Calculate the new points in the arc
         ReturnValue<Integer> p2Index = new ReturnValue<Integer>();
-        List<EastNorth> points = circleSeqmentPoints(p1, p2, p3, angleSeparation, false, p2Index);
+        List<EastNorth> points = circleArcPoints(p1, p2, p3, angleSeparation, false, p2Index);
 
         //// Create the new arc nodes. Insert anchor nodes at correct positions.
         List<Node> arcNodes = new ArrayList<Node>(points.size());
@@ -192,14 +192,14 @@ public class CircleArcMaker {
     }
 
     /**
-     * Return a list of coordinates lying an the circle segment determined by n1, n2 and n3.
-     * The order of the list and which of the 3 possible segments are given by the order of n1, n2, n3
+     * Return a list of coordinates lying an the circle arc determined by n1, n2 and n3.
+     * The order of the list and which of the 3 possible arcs to construct are given by the order of n1, n2, n3
      *
      * @param includeAnchors include the anchorpoints in the list. The original objects will be used, not copies.
      *                       If {@code false}, p2 will be replaced by the closest arcpoint.
      * @param anchor2Index if non-null, it's value will be set to p2's index in the returned list.
      */
-    private static List<EastNorth> circleSeqmentPoints(EastNorth p1, EastNorth p2, EastNorth p3,
+    private static List<EastNorth> circleArcPoints(EastNorth p1, EastNorth p2, EastNorth p3,
             int angleSeparation, boolean includeAnchors, ReturnValue<Integer> anchor2Index) {
 
         // triangle: three single nodes needed or a way with three nodes
