@@ -101,6 +101,7 @@ public class CircleArcMaker {
             return null;
         }
 
+
         EastNorth p1 = n1.getEastNorth();
         EastNorth p2 = n2.getEastNorth();
         EastNorth p3 = n3.getEastNorth();
@@ -132,9 +133,15 @@ public class CircleArcMaker {
         }
         arcNodes.add(n3);
 
-        //// "Fuse" the arc with all target ways
-
         Node[] anchorNodes = { n1, n2, n3 };
+        //// "Fuse" the arc with all target ways
+        fuseArc(anchorNodes, arcNodes, targetWays, cmds);
+
+        return cmds;
+    }
+
+    private static void fuseArc(Node[] anchorNodes, List<Node> arcNodes, Set<Way> targetWays, Collection<Command> cmds) {
+
         for (Way originalTw : targetWays) {
             Way tw = new Way(originalTw);
             boolean didChangeTw = false;
@@ -182,10 +189,7 @@ public class CircleArcMaker {
             if (didChangeTw)
                 cmds.add(new ChangeCommand(originalTw, tw));
         }
-
-        return cmds;
     }
-
 
     /**
      * Return a list of coordinates lying an the circle segment determined by n1, n2 and n3.
