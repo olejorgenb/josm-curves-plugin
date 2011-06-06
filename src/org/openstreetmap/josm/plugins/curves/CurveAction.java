@@ -25,10 +25,10 @@ public class CurveAction extends JosmAction {
     private static final long serialVersionUID = 1L;
 
     public CurveAction() {
-        super(tr("Curve") + CurveAction.class.hashCode(), null, tr("Create a curve"),
-                Shortcut.registerShortcut("tools:createcurve", tr("Tool: {0}", tr("Create a curve")), KeyEvent.VK_C,
+        super(tr("Circle arc"), "circlearc", tr("Create a circle arc"),
+                Shortcut.registerShortcut("tools:createcurve", tr("Tool: {0}", tr("Create a circle arc")), KeyEvent.VK_C,
                         Shortcut.GROUP_EDIT, Shortcut.SHIFT_DEFAULT), true);
-        putValue("help", ht("/Action/CreateCurve"));
+        putValue("help", ht("/Action/CreateCircleArc"));
     }
 
     @Override
